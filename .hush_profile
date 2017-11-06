@@ -1,0 +1,4 @@
+alias cls = clear
+alias copy = cp
+alias dir = ls --color
+set PROMPT = Yes, Master?
