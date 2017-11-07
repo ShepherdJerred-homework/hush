@@ -8,6 +8,10 @@ my %loadedAliases;
 my %loadedEnvironmentVariables;
 my $homeDir = $ENV{"HOME"};
 
+# Set env variables
+$ENV{"LWD"} = cwd;
+$ENV{"CWD"} = cwd;
+
 loadHushProfile();
 runCommandLoop();
 
@@ -60,25 +64,34 @@ sub executeCommand {
 
     if (lc ($command) eq "cd") {
         my $newDirectory = shift @arguments;
-        chdir ($newDirectory) or warn $!;
-        print("CWD: " . cwd . "\n");
+        changeDirectory($newDirectory);
+
     } elsif (lc ($command) eq "alias") {
-        while (my ($key, $value) = each %loadedAliases) {
-            print "Alias: " . $key . " = " . $value . "\n";
+        foreach my $key (sort keys %loadedAliases) {
+            print "Alias: " . $key . " = " . $loadedAliases{$key} . "\n";
         }
     } elsif (lc ($command) eq "set") {
-
+        foreach my $key (sort keys %loadedEnvironmentVariables) {
+            print "Set: " . $key . " = " . $loadedEnvironmentVariables{$key} . "\n";
+        }
     } elsif (lc ($command) eq "last") {
-
+        changeDirectory($ENV{"LWD"});
     } elsif (lc ($command) eq "history") {
+        my $hushHistoryFileName = $homeDir . "/.hush_history";
+        open (my $hushHistoryFile, $hushHistoryFileName) or warn "Could not open " . $hushHistoryFileName .  "\n";
 
+        my $lineNumber = 0;
+        while (my $line = <$hushHistoryFile>) {
+            print $lineNumber . "    " . $line;
+            $lineNumber++;
+        }
     } elsif (defined $loadedAliases{$command}) {
         my $unaliasedCommand = $loadedAliases{$command};
         my @inputArray = split(/ /, $input);
         shift @inputArray;
         unshift @inputArray, $unaliasedCommand;
         my $inputWithUnaliasedCommand = join(" ", @inputArray);
-        executeCommand($unaliasedCommand, @arguments, $inputWithUnaliasedCommand);
+        executeCommand($unaliasedCommand, \@arguments, $inputWithUnaliasedCommand);
     } else {
         executeNativeCommand($input);
     }
@@ -107,4 +120,15 @@ sub logCommand {
     open my $historyFile, ">>", $fileName or warn "Could not write to" . $fileName . ": " . $! . "\n";
 
     print $historyFile $input . "\n";
+}
+
+sub changeDirectory {
+    my ($newDirectory) = @_;
+    my $lastDirectory = cwd;
+    my $success = chdir ($newDirectory) or warn $!;
+    if ($success) {
+        print("CWD: " . cwd . "\n");
+        $ENV{"CWD"} = cwd;
+        $ENV{"LWD"} = $lastDirectory;
+    }
 }
