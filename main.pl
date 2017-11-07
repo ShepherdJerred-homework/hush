@@ -2,6 +2,8 @@
 use strict;
 use warnings FATAL => 'all';
 
+use Cwd;
+
 my %loadedAliases;
 my %loadedEnvironmentVariables;
 my $homeDir = $ENV{"HOME"};
@@ -11,7 +13,7 @@ runCommandLoop();
 
 sub loadHushProfile {
     my $hushProfileFileName = $homeDir . "/.hush_profile";
-    open my $hushProfileFile, $hushProfileFileName or die "Could not open $hushProfileFileName: $!";
+    open (my $hushProfileFile, $hushProfileFileName);
 
     while (my $line = <$hushProfileFile>) {
         chomp($line);
@@ -42,20 +44,24 @@ sub runCommandLoop {
         my @inputArray = split(/ /, $input);
 
         my $command = shift @inputArray;
+        my @arguments = @inputArray;
 
         if (lc ($command) eq "exit") {
             exit 0;
         } else {
-            executeCommand($command, $input);
+            executeCommand($command, \@arguments, $input);
         }
     }
 }
 
 sub executeCommand {
-    my ($command, $input) = @_;
+    my ($command, $argumentsReference, $input) = @_;
+    my @arguments = @{ $argumentsReference };
 
     if (lc ($command) eq "cd") {
-
+        my $newDirectory = shift @arguments;
+        chdir ($newDirectory) or warn $!;
+        print("CWD: " . cwd . "\n");
     } elsif (lc ($command) eq "alias") {
         while (my ($key, $value) = each %loadedAliases) {
             print "Alias: " . $key . " = " . $value . "\n";
@@ -67,7 +73,12 @@ sub executeCommand {
     } elsif (lc ($command) eq "history") {
 
     } elsif (defined $loadedAliases{$command}) {
-        executeCommand($loadedAliases{$command});
+        my $unaliasedCommand = $loadedAliases{$command};
+        my @inputArray = split(/ /, $input);
+        shift @inputArray;
+        unshift @inputArray, $unaliasedCommand;
+        my $inputWithUnaliasedCommand = join(" ", @inputArray);
+        executeCommand($unaliasedCommand, @arguments, $inputWithUnaliasedCommand);
     } else {
         executeNativeCommand($input);
     }
@@ -93,7 +104,7 @@ sub logCommand {
     my ($input) = @_;
     my $fileName = $homeDir . "/.hush_history";
 
-    open my $historyFile, ">>", $fileName or die "Could not open $fileName: $!";
+    open my $historyFile, ">>", $fileName or warn "Could not write to" . $fileName . ": " . $! . "\n";
 
     print $historyFile $input . "\n";
 }
