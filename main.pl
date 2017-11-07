@@ -2,81 +2,98 @@
 use strict;
 use warnings FATAL => 'all';
 
-my %aliases;
-my %envVars;
-my ($command, $inLine, $pid);
+my %loadedAliases;
+my %loadedEnvironmentVariables;
 my $homeDir = $ENV{"HOME"};
 
-getProfile();
-runLoop();
+loadHushProfile();
+runCommandLoop();
 
-sub getProfile {
+sub loadHushProfile {
+    my $hushProfileFileName = $homeDir . "/.hush_profile";
+    open my $hushProfileFile, $hushProfileFileName or die "Could not open $hushProfileFileName: $!";
 
-    my $file = $homeDir . "/.hush_profile";
-    open my $info, $file or die "Could not open $file: $!";
-
-    # TODO Don't include end line when reading in
-    while (my $line = <$info>) {
-        my ($key, $value) = split(/ = /, $line, 2);
-        my ($type, $typeValue) = split(/ /, $key, 2);
-        if ($type eq "alias") {
-            $aliases{$typeValue} = $value;
-        }
-        elsif ($type eq "set") {
-            $envVars{$typeValue} = $value;
-            $ENV{$typeValue} = $value;
-            print $ENV{$typeValue};
+    while (my $line = <$hushProfileFile>) {
+        chomp($line);
+        my ($left, $right) = split(/ = /, $line, 2);
+        my ($keyType, $keyValue) = split(/ /, $left, 2);
+        if ($keyType eq "alias") {
+            $loadedAliases{$keyValue} = $right;
+        } elsif ($keyType eq "set") {
+            $loadedEnvironmentVariables{$keyValue} = $right;
+            $ENV{$keyValue} = $right;
         }
     }
 }
 
-sub runLoop {
-    do {
-        my $prompt;
+sub runCommandLoop {
+    my $promptText;
 
-        if (defined $ENV{"PROMPT"}) {
-            $prompt = $ENV{"PROMPT"}
-        }
-        else {
-            $prompt = "[hush:" . $$ . "]\$ ";
-        }
+    if (defined $ENV{"PROMPT"}) {
+        $promptText = $ENV{"PROMPT"}
+    } else {
+        $promptText = "[hush:" . $$ . "]\$ ";
+    }
 
-        print $prompt;
-        $inLine = <STDIN>;
-        chomp($inLine);
-        # Insert code here to extract the 1st word of $inLine and store it in $command
-        # TODO Check for cd, alias, set, last, history
-        unless (lc($command) eq "exit") {
-            executeLinuxCommand($inLine);
-            appendCommand($inLine);
+    for (;;) {
+        print $promptText;
+        my $input = <STDIN>;
+        chomp($input);
+        my @inputArray = split(/ /, $input);
+
+        my $command = shift @inputArray;
+
+        if (lc ($command) eq "exit") {
+            exit 0;
+        } else {
+            executeCommand($command, $input);
         }
-    } while (lc($command) ne "exit");
+    }
 }
 
-sub executeLinuxCommand {
-    my $commandLine = shift(@_);
-    $pid = fork();
+sub executeCommand {
+    my ($command, $input) = @_;
+
+    if (lc ($command) eq "cd") {
+
+    } elsif (lc ($command) eq "alias") {
+        while (my ($key, $value) = each %loadedAliases) {
+            print "Alias: " . $key . " = " . $value . "\n";
+        }
+    } elsif (lc ($command) eq "set") {
+
+    } elsif (lc ($command) eq "last") {
+
+    } elsif (lc ($command) eq "history") {
+
+    } elsif (defined $loadedAliases{$command}) {
+        executeCommand($loadedAliases{$command});
+    } else {
+        executeNativeCommand($input);
+    }
+
+    logCommand($input);
+}
+
+sub executeNativeCommand {
+    my ($input) = @_;
+    my $pid = fork();
     if ($pid < 0) {
         print "Unable to use fork() function . \n";
         exit 0;
-    }
-    elsif ($pid > 0) {
-        # parent process will execute this branch of the if statement:
+    } elsif ($pid > 0) {
         wait();
-    }
-    else {
-        # child process will execute this branch:
-        exec($commandLine);
-        # Make absolutely SURE that child doesn’t get past this point!
+    } else {
+        exec($input);
         exit 0;
     }
 }
 
-sub appendCommand {
-    my $lastCommand = shift(@_);
+sub logCommand {
+    my ($input) = @_;
     my $fileName = $homeDir . "/.hush_history";
 
-    open my $historyFile, "<" ,$homeDir or die "Could not open $fileName: $!";
+    open my $historyFile, ">>", $fileName or die "Could not open $fileName: $!";
 
-    print $historyFile $lastCommand . "\n";
+    print $historyFile $input . "\n";
 }
